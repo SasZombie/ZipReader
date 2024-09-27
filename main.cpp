@@ -3,18 +3,23 @@
 #include <fstream>
 #include <iomanip>
 #include <bitset>
+#include <string_view>
+#include <memory>
 
 // Local File Header
 struct localFileHeader
 {
-    std::string sig, ver, gpf, compMethod, flt, fld, crc32, compSize, uncompSize, fName, eField;
-    unsigned int flen, eFlen;
+    std::string sig, ver, gpf, compMethod, flt, fld, crc32, fName, eField;
+    uint32_t compSize, uncompSize;
+    uint16_t flen, eFlen;
+
+    std::unique_ptr<char> data;
 };
 
 char *readBytes(std::ifstream &file, size_t numberBytes);
 void printLocalDescriptionTable(const localFileHeader &header);
 void createLocalDescriptionTable(std::ifstream &file);
-void printSpecialString(const std::string &string);
+void printSpecialString(const std::string_view string);
 
 [[nodiscard]] char *readBytes(std::ifstream &file, size_t numberBytes)
 {
@@ -37,9 +42,9 @@ void createLocalDescriptionTable(std::ifstream &file)
 {
     localFileHeader currentHeader;
 
-    size_t lengths[] = {4, 2, 2, 2, 2, 2, 4, 4, 4};
+    size_t lengths[] = {4, 2, 2, 2, 2, 2, 4};
     std::string *fields[] = {&currentHeader.sig, &currentHeader.ver, &currentHeader.gpf, &currentHeader.compMethod,
-                             &currentHeader.flt, &currentHeader.fld, &currentHeader.crc32, &currentHeader.compSize, &currentHeader.uncompSize};
+                             &currentHeader.flt, &currentHeader.fld, &currentHeader.crc32};
     char * buff = nullptr;
 
     for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
@@ -53,6 +58,30 @@ void createLocalDescriptionTable(std::ifstream &file)
 
         delete[] buff;
     }
+
+    unsigned char buffer[4];
+    file.read(reinterpret_cast<char*>(buffer), 4);
+
+    uint32_t compressedSize = 
+        static_cast<uint32_t>(buffer[0]) |             
+        (static_cast<uint32_t>(buffer[1]) << 8)  |     
+        (static_cast<uint32_t>(buffer[2]) << 16) |     
+        (static_cast<uint32_t>(buffer[3]) << 24); 
+
+    currentHeader.compSize = compressedSize;
+    std::cout << static_cast<unsigned int>(static_cast<unsigned char>(compressedSize)) << ' ' << currentHeader.compSize << '\n';
+
+
+    file.read(reinterpret_cast<char*>(buffer), 4);
+
+    uint32_t uncompressedSize = 
+        static_cast<uint32_t>(buffer[0]) |             
+        (static_cast<uint32_t>(buffer[1]) << 8)  |     
+        (static_cast<uint32_t>(buffer[2]) << 16) |     
+        (static_cast<uint32_t>(buffer[3]) << 24); 
+
+    currentHeader.uncompSize = uncompressedSize;
+    std::cout << currentHeader.uncompSize << '\n';
 
     buff = readBytes(file, 2);
     currentHeader.flen = static_cast<unsigned char>(buff[0]);
@@ -70,12 +99,19 @@ void createLocalDescriptionTable(std::ifstream &file)
     currentHeader.eField = std::string(buff, currentHeader.eFlen);
     delete[] buff;
 
-    
+    currentHeader.data = std::make_unique<char>(currentHeader.compSize);
+
+    // for(size_t i = 0; i < currentHeader.uncompSize; ++i)
+    // {
+    //     std::cout << i << ' ';
+    //     //We know we only read 1 byte so we can hack this
+    //     // currentHeader.data.get()[i] = readBytes(file, 1)[0];
+    // }
 
     printLocalDescriptionTable(currentHeader);
 }
 
-void printSpecialString(const std::string &string)
+void printSpecialString(const std::string_view string)
 {
     for (size_t i = 0; i < string.size(); ++i)
     {
@@ -107,10 +143,8 @@ void printLocalDescriptionTable(const localFileHeader &header)
     printSpecialString(header.fld);
     std::cout << "\nCRC-32 of uncompressed data: ";
     printSpecialString(header.crc32);
-    std::cout << "\nCompressed size:             ";
-    printSpecialString(header.compSize);
-    std::cout << "\nUncompressed size:           ";
-    printSpecialString(header.uncompSize);
+    std::cout << "\nCompressed size:             " << header.compSize;
+    std::cout << "\nUncompressed size:           " << header.uncompSize;
     std::cout << "\nFile Name Length:            " << header.flen;
     std::cout << "\nExtra Field Length:          " << header.eFlen;
     std::cout << "\nFile Name:                   ";
