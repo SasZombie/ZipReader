@@ -5,6 +5,7 @@
 #include <bitset>
 #include <string_view>
 #include <memory>
+#include <vector>
 
 // Local File Header
 struct localFileHeader
@@ -13,7 +14,7 @@ struct localFileHeader
     uint32_t compSize, uncompSize;
     uint16_t flen, eFlen;
 
-    std::unique_ptr<char> data;
+    std::vector<char> data;
 };
 
 char *readBytes(std::ifstream &file, size_t numberBytes);
@@ -69,7 +70,7 @@ void createLocalDescriptionTable(std::ifstream &file)
         (static_cast<uint32_t>(buffer[3]) << 24); 
 
     currentHeader.compSize = compressedSize;
-    std::cout << static_cast<unsigned int>(static_cast<unsigned char>(compressedSize)) << ' ' << currentHeader.compSize << '\n';
+    // std::cout << static_cast<unsigned int>(static_cast<unsigned char>(compressedSize)) << ' ' << currentHeader.compSize << '\n';
 
 
     file.read(reinterpret_cast<char*>(buffer), 4);
@@ -81,7 +82,7 @@ void createLocalDescriptionTable(std::ifstream &file)
         (static_cast<uint32_t>(buffer[3]) << 24); 
 
     currentHeader.uncompSize = uncompressedSize;
-    std::cout << currentHeader.uncompSize << '\n';
+    // std::cout << currentHeader.uncompSize << '\n';
 
     buff = readBytes(file, 2);
     currentHeader.flen = static_cast<unsigned char>(buff[0]);
@@ -99,14 +100,14 @@ void createLocalDescriptionTable(std::ifstream &file)
     currentHeader.eField = std::string(buff, currentHeader.eFlen);
     delete[] buff;
 
-    currentHeader.data = std::make_unique<char>(currentHeader.compSize);
 
-    // for(size_t i = 0; i < currentHeader.uncompSize; ++i)
-    // {
-    //     std::cout << i << ' ';
-    //     //We know we only read 1 byte so we can hack this
-    //     // currentHeader.data.get()[i] = readBytes(file, 1)[0];
-    // }
+    for(size_t i = 0; i < currentHeader.uncompSize; ++i)
+    {
+        // We know we only read 1 byte so we can hack this
+        buff = readBytes(file, 1);
+        currentHeader.data.push_back(buff[0]);
+        delete[] buff;
+    }
 
     printLocalDescriptionTable(currentHeader);
 }
@@ -151,6 +152,13 @@ void printLocalDescriptionTable(const localFileHeader &header)
     printSpecialString(header.fName);
     std::cout << "\nExtra Field Name:            ";
     printSpecialString(header.eField);
+    std::cout << "\nData Extracted:\n";
+    
+    for(const char c : header.data)
+    {
+        std::cout << c;
+    }
+
 }
 
 int main()
