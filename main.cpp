@@ -23,16 +23,17 @@ struct EOCD
     uint32_t sizeOfCD, offsetRelStart;
 
     friend std::ostream &operator<<(std::ostream &os, const EOCD &eocd)
-    {
-        os << "sig: " << eocd.sig << "\n";
-        os << "nrDisk: " << eocd.nrDisk << "\n";
-        os << "nrDiskWhereCDStarts: " << eocd.nrDiskWhereCDStarts << "\n";
-        os << "nrCentralDirRecOnDisk: " << eocd.nrCentralDirRecOnDisk << "\n";
-        os << "nrCentralDirTotal: " << eocd.nrCentralDirTotal << "\n";
-        os << "comlen: " << eocd.comlen << "\n";
-        os << "sizeOfCD: " << eocd.sizeOfCD << "\n";
-        os << "offsetRelStart: " << eocd.offsetRelStart << "\n";
-        os << "comment: " << eocd.comment << "\n";
+    {   
+        os << "End of central directory record\n";
+        os << "Signature:                               " << eocd.sig << "\n";
+        os << "Number of this disk:                     " << eocd.nrDisk << "\n";
+        os << "Disk where CD starts:                    " << eocd.nrDiskWhereCDStarts << "\n";
+        os << "Number of CD on disk:                    " << eocd.nrCentralDirRecOnDisk << "\n";
+        os << "Total number of CD records:              " << eocd.nrCentralDirTotal << "\n";
+        os << "Size of CD:                              " << eocd.sizeOfCD << "\n";
+        os << "Offset of start of CD relative to start: " << eocd.offsetRelStart << "\n";
+        os << "Comment length:                          " << eocd.comlen << "\n";
+        os << "Comment:                                 " << eocd.comment << "\n";
         return os;
     }
 };
