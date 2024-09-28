@@ -7,7 +7,6 @@
 #include <memory>
 #include <vector>
 
-
 void printSpecialString(const std::string_view string);
 // Local File Header
 struct centralDirectoryFileHeader
@@ -83,9 +82,7 @@ struct localFileHeader
 };
 
 char *readBytes(std::ifstream &file, size_t numberBytes);
-void printLocalDescriptionTable(const localFileHeader &header);
 void createLocalDescriptionTable(std::ifstream &file);
-
 EOCD scanForEOCD(std::ifstream &file);
 
 [[nodiscard]] char *readBytes(std::ifstream &file, size_t numberBytes)
@@ -112,68 +109,68 @@ void createLocalDescriptionTable(std::ifstream &file)
     size_t lengths[] = {4, 2, 2, 2, 2, 2, 4};
     std::string *fields[] = {&currentHeader.sig, &currentHeader.ver, &currentHeader.gpf, &currentHeader.compMethod,
                              &currentHeader.flt, &currentHeader.fld, &currentHeader.crc32};
-    char *buff = nullptr;
+    unsigned char buff[4];
 
     for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
     {
-        buff = readBytes(file, lengths[i]);
+        file.read(reinterpret_cast<char *>(buff), lengths[i]);
 
         if (fields[i] != nullptr)
         {
-            *fields[i] = std::string(buff, lengths[i]);
+            *fields[i] = std::string(reinterpret_cast<char*>(buff), lengths[i]);
         }
-
-        delete[] buff;
     }
 
-    unsigned char buffer[4];
-    file.read(reinterpret_cast<char *>(buffer), 4);
+    file.read(reinterpret_cast<char *>(buff), 4);
 
     uint32_t compressedSize =
-        static_cast<uint32_t>(buffer[0]) |
-        (static_cast<uint32_t>(buffer[1]) << 8) |
-        (static_cast<uint32_t>(buffer[2]) << 16) |
-        (static_cast<uint32_t>(buffer[3]) << 24);
+        static_cast<uint32_t>(buff[0]) |
+        (static_cast<uint32_t>(buff[1]) << 8) |
+        (static_cast<uint32_t>(buff[2]) << 16) |
+        (static_cast<uint32_t>(buff[3]) << 24);
 
     currentHeader.compSize = compressedSize;
-    // std::cout << static_cast<unsigned int>(static_cast<unsigned char>(compressedSize)) << ' ' << currentHeader.compSize << '\n';
 
-    file.read(reinterpret_cast<char *>(buffer), 4);
+    file.read(reinterpret_cast<char *>(buff), 4);
 
     uint32_t uncompressedSize =
-        static_cast<uint32_t>(buffer[0]) |
-        (static_cast<uint32_t>(buffer[1]) << 8) |
-        (static_cast<uint32_t>(buffer[2]) << 16) |
-        (static_cast<uint32_t>(buffer[3]) << 24);
+        static_cast<uint32_t>(buff[0]) |
+        (static_cast<uint32_t>(buff[1]) << 8) |
+        (static_cast<uint32_t>(buff[2]) << 16) |
+        (static_cast<uint32_t>(buff[3]) << 24);
 
     currentHeader.uncompSize = uncompressedSize;
 
-    buff = readBytes(file, 2);
-    currentHeader.flen = static_cast<unsigned char>(buff[0]);
-    delete[] buff;
+    file.read(reinterpret_cast<char *>(buff), 2);
+    uint16_t flen =
+        static_cast<uint16_t>(buff[0]) |
+        (static_cast<uint16_t>(buff[1]) << 8);
 
-    buff = readBytes(file, 2);
-    currentHeader.eFlen = static_cast<unsigned char>(buff[0]);
-    delete[] buff;
+    currentHeader.flen = flen;
 
-    buff = readBytes(file, currentHeader.flen);
-    currentHeader.fName = std::string(buff, currentHeader.flen);
-    delete[] buff;
+    file.read(reinterpret_cast<char *>(buff), 2);
+    uint16_t eFlen =
+        static_cast<uint16_t>(buff[0]) |
+        (static_cast<uint16_t>(buff[1]) << 8);
+    currentHeader.eFlen = eFlen;
 
-    buff = readBytes(file, currentHeader.eFlen);
-    currentHeader.eField = std::string(buff, currentHeader.eFlen);
-    delete[] buff;
+    char* dynBuff = readBytes(file, currentHeader.flen);
+    currentHeader.fName = std::string(dynBuff, currentHeader.flen);
+    delete[] dynBuff;
+
+    dynBuff = readBytes(file, currentHeader.eFlen);
+    currentHeader.eField = std::string(dynBuff, currentHeader.eFlen);
+    delete[] dynBuff;
 
     for (size_t i = 0; i < currentHeader.uncompSize; ++i)
     {
         // We know we only read 1 byte so we can hack this
-        buff = readBytes(file, 1);
+        file.read(reinterpret_cast<char *>(buff), 1);
+
         currentHeader.data.push_back(buff[0]);
-        delete[] buff;
     }
 
     std::cout << currentHeader;
-    // printLocalDescriptionTable(currentHeader);
 }
 
 void printSpecialString(const std::string_view string)
@@ -189,38 +186,6 @@ void printSpecialString(const std::string_view string)
             // If non-printable, print its hex value in escape format
             std::cout << "\\" << std::oct << static_cast<unsigned int>(static_cast<unsigned char>(string[i])) << std::dec;
         }
-    }
-}
-
-void printLocalDescriptionTable(const localFileHeader &header)
-{
-    std::cout << "Description for File Table\nLocal file header signature: ";
-    printSpecialString(header.sig);
-    std::cout << "\nVersion needed to extract:   ";
-    printSpecialString(header.ver);
-    std::cout << "\nGeneral Purpose Flag:        ";
-    printSpecialString(header.gpf);
-    std::cout << "\nCompresion Method:           ";
-    printSpecialString(header.compMethod);
-    std::cout << "\nFile Last Modification time: ";
-    printSpecialString(header.flt);
-    std::cout << "\nFile Last Modification date: ";
-    printSpecialString(header.fld);
-    std::cout << "\nCRC-32 of uncompressed data: ";
-    printSpecialString(header.crc32);
-    std::cout << "\nCompressed size:             " << header.compSize;
-    std::cout << "\nUncompressed size:           " << header.uncompSize;
-    std::cout << "\nFile Name Length:            " << header.flen;
-    std::cout << "\nExtra Field Length:          " << header.eFlen;
-    std::cout << "\nFile Name:                   ";
-    printSpecialString(header.fName);
-    std::cout << "\nExtra Field Name:            ";
-    printSpecialString(header.eField);
-    std::cout << "\nData Extracted:\n";
-
-    for (const char c : header.data)
-    {
-        std::cout << c;
     }
 }
 
@@ -243,31 +208,30 @@ EOCD scanForEOCD(std::ifstream &file)
             {
                 eocd.sig = "06054b50";
 
-                char *buff = readBytes(file, 2);
-                eocd.nrDisk = std::string(buff, 2);
-                delete[] buff;
+                unsigned char buff[4];
 
-                buff = readBytes(file, 2);
-                eocd.nrDiskWhereCDStarts = std::string(buff, 2);
-                delete[] buff;
+                file.read(reinterpret_cast<char *>(buff), 2);
+                eocd.nrDisk = std::string(reinterpret_cast<char *>(buff), 2);
 
-                buff = readBytes(file, 2);
+                file.read(reinterpret_cast<char *>(buff), 2);
+                eocd.nrDiskWhereCDStarts = std::string(reinterpret_cast<char *>(buff), 2);
+
+                file.read(reinterpret_cast<char *>(buff), 2);
                 uint16_t nrCentralDisk =
                     static_cast<uint16_t>(buff[0]) |
                     (static_cast<uint16_t>(buff[1]) << 8);
-                delete[] buff;
 
                 eocd.nrCentralDirRecOnDisk = nrCentralDisk;
 
-                buff = readBytes(file, 2);
+                file.read(reinterpret_cast<char *>(buff), 2);
+
                 uint16_t nrCentralDiskTot =
                     static_cast<uint16_t>(buff[0]) |
                     (static_cast<uint16_t>(buff[1]) << 8);
-                delete[] buff;
 
                 eocd.nrCentralDirTotal = nrCentralDiskTot;
 
-                buff = readBytes(file, 4);
+                file.read(reinterpret_cast<char *>(buff), 4);
                 uint32_t sizeCD =
                     static_cast<uint32_t>(buff[0]) |
                     (static_cast<uint32_t>(buff[1]) << 8) |
@@ -275,9 +239,8 @@ EOCD scanForEOCD(std::ifstream &file)
                     (static_cast<uint32_t>(buff[3]) << 24);
 
                 eocd.sizeOfCD = sizeCD;
-                delete[] buff;
 
-                buff = readBytes(file, 4);
+                file.read(reinterpret_cast<char *>(buff), 4);
                 uint32_t offSetOfStart =
                     static_cast<uint32_t>(buff[0]) |
                     (static_cast<uint32_t>(buff[1]) << 8) |
@@ -285,21 +248,19 @@ EOCD scanForEOCD(std::ifstream &file)
                     (static_cast<uint32_t>(buff[3]) << 24);
 
                 eocd.offsetRelStart = offSetOfStart;
-                delete[] buff;
 
-                buff = readBytes(file, 2);
+                file.read(reinterpret_cast<char *>(buff), 2);
                 uint16_t commentLen =
                     static_cast<uint16_t>(buff[0]) |
                     (static_cast<uint16_t>(buff[1]) << 8);
-                delete[] buff;
 
                 eocd.comlen = commentLen;
 
-                buff = readBytes(file, commentLen);
+                char* dymbuff = readBytes(file, commentLen);
 
-                eocd.comment = std::string(buff, commentLen);
+                eocd.comment = std::string(dymbuff, commentLen);
 
-                delete[] buff;
+                delete[] dymbuff;
                 return eocd;
             }
         }
@@ -325,7 +286,7 @@ int main()
     }
 
     // createLocalDescriptionTable(file);
-    // std::cout << scanForEOCD(file);
+    std::cout << scanForEOCD(file);
 
     file.close();
 }
