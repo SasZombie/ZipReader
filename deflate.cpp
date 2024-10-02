@@ -10,7 +10,7 @@ class BitReader
 {
 public:
     BitReader(const std::string &filename)
-        : file(filename, std::ios::binary), currentByte(0), bitsRemaining(0)
+        : file(filename, std::ios::binary), currentByte(0), bitsRemaining(0), mask(128)
     {
         if (!file)
         {
@@ -18,80 +18,62 @@ public:
         }
     }
 
-    unsigned int readBits(int n)
+    void readByte()
     {
-        if (n < 1 || n > 32)
+        file.read(reinterpret_cast<char *>(&currentByte), 1);
+
+        if (file.gcount() != 1)
         {
-            std::cout << "Warning! Invalid readBits input. Truncated to 1 from " << n << '\n';
-            n = 1;
+            // std::cerr << "File read error\n";
+
+            throw std::runtime_error("Error reading byte\n");
         }
-
-        unsigned int result = 0;
-        int bitsRead = 0;
-
-        for (int i = 0; i < n; ++i)
-        {
-            bool bit = readBit();
-            if (bitsRemaining > 0 || (bitsRead > 0))
-            {
-                if (bit)
-                {
-                    result |= (1 << (n - 1 - i));
-                }
-                bitsRead++;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        if (bitsRead == 0)
-        {
-            throw std::runtime_error("End of file reached before reading the specified number of bits");
-        }
-
-        return result;
+        this->bitsRemaining = 8;
+        this->mask = 128;
     }
 
     bool readBit()
     {
-        if (bitsRemaining == 0)
+        if (!this->bitsRemaining)
         {
-            if (!readNextByte())
-            {
-                return false;
-            }
+            this->readByte();
         }
 
-        bool bit = (currentByte >> (bitsRemaining - 1)) & 1;
-        bitsRemaining--;
-        return bit;
+        bool val = (currentByte & mask) >> (bitsRemaining - 1);
+        --bitsRemaining;
+        mask = mask / 2;
+
+        return val;
     }
 
-    bool readNextByte()
+    unsigned char readBits(unsigned int bits)
     {
-        if (file.read(reinterpret_cast<char *>(&currentByte), 1))
+        if (bits < 1 || bits > 8)
         {
-            bitsRemaining = 8;
-            return true;
-        }
-        return false;
-    }
+            std::cout << "Warning: incorrect value of bits, truncated to 1\n";
+            bits = 1;
+        };
 
-    ~BitReader()
-    {
-        if (file.is_open())
+        // std::bitset<8> number;
+
+        unsigned char number = 0;
+
+        for (size_t i = 0; i < bits; ++i)
         {
-            file.close();
+            bool rezult = readBit();
+            number |= (rezult << (bits - i - 1));
         }
+
+        return number;
     }
 
 private:
     std::ifstream file;
     unsigned char currentByte;
     int bitsRemaining;
+    size_t mask;
 };
+
 
 void printSpecialString(const std::string_view string);
 
@@ -123,6 +105,10 @@ struct Node
 
     std::strong_ordering operator<=>(const Node &other) const = default;
 };
+std::shared_ptr<Node> buildHuffmanTree(const std::vector<size_t> &lenCounts);
+void generateCode(std::shared_ptr<Node> head, const std::string &code, std::vector<std::string> &codes);
+std::string traverse();
+
 
 std::shared_ptr<Node> buildHuffmanTree(const std::vector<size_t> &lenCounts)
 {
@@ -171,14 +157,13 @@ void generateCode(std::shared_ptr<Node> head, const std::string &code, std::vect
 
 std::string traverse()
 {
+    return std::string();
 }
 
 //TODO: This bit reader somehow is trash. Make new one
 int main()
 {
     BitReader reader("viszualize");
-
-    std::string encoded = "01100110000110100011010101111000100";
 
     std::cout << "First 3 bits: " << std::bitset<3>(reader.readBits(3)) << '\n';
 
@@ -196,10 +181,10 @@ int main()
         codeLengths.push_back(reader.readBits(4));
     }
 
-    for (size_t i = 0; i < HCLEN; ++i)
-    {
-        std::cout << CodeLengthTable[i] << " --> " << codeLengths[i] << '\n';
-    }
+    // for (size_t i = 0; i < HCLEN; ++i)
+    // {
+    //     std::cout << CodeLengthTable[i] << " --> " << codeLengths[i] << '\n';
+    // }
 
     std::vector<size_t> lengthCount(16, 0);
 
@@ -209,10 +194,10 @@ int main()
             ++lengthCount[len];
     }
 
-    for (const size_t len : lengthCount)
-    {
-        std::cout << len << '\n';
-    }
+    // for (const size_t len : lengthCount)
+    // {
+    //     std::cout << len << '\n';
+    // }
 
     std::shared_ptr<Node> root = buildHuffmanTree(lengthCount);
 
@@ -224,35 +209,27 @@ int main()
 
     generateCode(head, "", codes);
 
-    for (const std::string_view str : codes)
-    {
-        if (str.size() != 0)
-            std::cout << str << '\n';
-    }
-
-    unsigned int buff[6];
-    std::bitset<6> set;
-    int index = 0;
-
-    reader.readBits(5);
-    reader.readBits(6);
-
-    // for (size_t i = 0; i < 10; ++i)
+    // for (const std::string_view str : codes)
     // {
-    //     std::string str;
-    //     head = root;
-    //     while (head.get()->length == -1)
-    //     {
-    //         unsigned int currentBit = reader.readBits(1);
-    //         // buff[index] = currentBit;
-    //         str = str + std::to_string(currentBit);
-
-    //         if (currentBit == 0)
-    //             head = head->left;
-    //         else
-    //             head = head->right;
-    //     }
-
-    //     std::cout << str << '\n';
+    //     if (str.size() != 0)
+    //         std::cout << str << '\n';
     // }
+
+    for (size_t i = 0; i < 10; ++i)
+    {
+        std::string str;
+        head = root;
+        while (head.get()->length == -1)
+        {
+            unsigned int currentBit = reader.readBit();
+            str = str + std::to_string(currentBit);
+
+            if (currentBit == 0)
+                head = head->left;
+            else
+                head = head->right;
+        }
+
+        std::cout << str << '\n';
+    }
 }
