@@ -5,6 +5,8 @@
 #include <vector>
 #include <memory>
 #include <queue>
+#include <algorithm>
+#include <unordered_map>
 
 class BitReader
 {
@@ -74,7 +76,6 @@ private:
     size_t mask;
 };
 
-
 void printSpecialString(const std::string_view string);
 
 void printSpecialString(const std::string_view string)
@@ -93,77 +94,105 @@ void printSpecialString(const std::string_view string)
     }
 }
 
+struct HuffemanCode
+{
+    size_t symbol;
+    size_t length;
+    size_t canonicCode;
+
+    friend std::ostream &operator<<(std::ostream &os, const HuffemanCode &codes)
+    {
+        os << codes.symbol << " -> " << codes.length << " -> " << std::bitset<8>(codes.canonicCode).to_string().substr(8 - codes.length) << " -> " << codes.canonicCode << '\n';
+
+        return os;
+    }
+};
+
 struct Node
 {
-    int length;
-    int count;
-    std::shared_ptr<Node> left;
-    std::shared_ptr<Node> right;
-
-    Node(int l, int c)
-        : length(l), count(c), left(nullptr), right(nullptr) {}
+    size_t depth = 0;
+    HuffemanCode code;
+    std::unique_ptr<Node> left = nullptr;
+    std::unique_ptr<Node> right = nullptr;
 
     std::strong_ordering operator<=>(const Node &other) const = default;
 };
-std::shared_ptr<Node> buildHuffmanTree(const std::vector<size_t> &lenCounts);
-void generateCode(std::shared_ptr<Node> head, const std::string &code, std::vector<std::string> &codes);
-std::string traverse();
 
-
-std::shared_ptr<Node> buildHuffmanTree(const std::vector<size_t> &lenCounts)
+void insertInTree(Node *head, const HuffemanCode &code, int i)
 {
-    std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>> minHeap;
-
-    for (size_t i = 0; i < lenCounts.size(); ++i)
+    if (i <= 0)
     {
-        if (lenCounts[i] > 0)
+        head->code = code;
+        return;
+    }
+
+
+    if ((code.canonicCode & (1UL << (i - 1))) == 0)
+    {
+        if (head->left == nullptr)
         {
-            minHeap.push(std::make_shared<Node>(i, lenCounts[i]));
+            head->left = std::make_unique<Node>();
+            head->left->depth = head->depth + 1;  
         }
+        insertInTree(head->left.get(), code, i - 1);
     }
-
-    while (minHeap.size() > 1)
-    {
-        std::shared_ptr<Node> left = minHeap.top();
-        minHeap.pop();
-
-        std::shared_ptr<Node> right = minHeap.top();
-        minHeap.pop();
-
-        std::shared_ptr<Node> combined = std::make_shared<Node>(-1, left->count + right->count);
-
-        combined->left = left;
-        combined->right = right;
-
-        minHeap.push(combined);
+    else
+    { 
+        if (head->right == nullptr)
+        {
+            head->right = std::make_unique<Node>(); 
+            head->right->depth = head->depth + 1;   
+        }
+        insertInTree(head->right.get(), code, i - 1);
     }
-
-    return minHeap.top();
 }
-
-void generateCode(std::shared_ptr<Node> head, const std::string &code, std::vector<std::string> &codes)
+void printTree(Node *node)
 {
-    if (!head.get())
+    if (node == nullptr)
         return;
 
-    if (head->length != -1)
-    {
-        codes[head->length] = code;
+    if (node->left == nullptr && node->right == nullptr)
+    { 
+        std::cout << "Leaf node: " << node->code << " Depth: " << node->depth << std::endl;
     }
 
-    generateCode(head->left, code + "0", codes);
-    generateCode(head->right, code + "1", codes);
+    printTree(node->left.get());
+    printTree(node->right.get());
 }
 
-std::string traverse()
+size_t decodeNextSymbol(BitReader &reader, Node *head, int iter)
 {
-    return std::string();
+    if (head->left == nullptr && head->right == nullptr)
+    {
+        return head->code.symbol;
+    }
+
+    if (reader.readBit())
+    {
+        if (head->right.get() == nullptr)
+        {
+            std::cerr << "Error IN Right, not existant\n";
+            std::exit(EXIT_FAILURE);
+        }
+        decodeNextSymbol(reader, head->right.get(), iter + 1);
+    }
+    else
+    {
+        if (head->left.get() == nullptr)
+        {
+            std::cerr << "Error IN Left, not existant\n"
+                      << iter;
+            std::exit(EXIT_FAILURE);
+        }
+        decodeNextSymbol(reader, head->left.get(), iter + 1);
+    }
+    return 1;
 }
 
-//TODO: This bit reader somehow is trash. Make new one
 int main()
 {
-    BitReader reader("viszualize");
+
+    BitReader reader("testDeflate.zip");
 
     std::cout << "First 3 bits: " << std::bitset<3>(reader.readBits(3)) << '\n';
 
@@ -174,62 +203,98 @@ int main()
     std::cout << "HLIT: " << HLIT << "\nHDIST: " << HDIST << "\nHCLEN: " << HCLEN << '\n';
 
     constexpr size_t CodeLengthTable[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-    std::vector<size_t> codeLengths;
+    constexpr size_t CodeLenTableSize = sizeof(CodeLengthTable) / sizeof(CodeLengthTable[0]);
+
+    std::vector<size_t> codeLengths(19, 0);
 
     for (size_t i = 0; i < HCLEN; ++i)
     {
-        codeLengths.push_back(reader.readBits(4));
+        codeLengths[CodeLengthTable[i]] = reader.readBits(3);
     }
 
-    // for (size_t i = 0; i < HCLEN; ++i)
-    // {
-    //     std::cout << CodeLengthTable[i] << " --> " << codeLengths[i] << '\n';
-    // }
-
-    std::vector<size_t> lengthCount(16, 0);
-
-    for (const size_t len : codeLengths)
+    for (size_t i = 0; i < CodeLenTableSize; ++i)
     {
-        if (len > 0)
-            ++lengthCount[len];
+        std::cout << CodeLengthTable[i] << " --> " << codeLengths[i] << '\n';
     }
 
-    // for (const size_t len : lengthCount)
-    // {
-    //     std::cout << len << '\n';
-    // }
+    std::cout << "============================================\n";
 
-    std::shared_ptr<Node> root = buildHuffmanTree(lengthCount);
+    std::vector<std::pair<size_t, size_t>> pairs;
 
-    std::vector<std::string> codes;
-
-    codes.resize(16);
-
-    std::shared_ptr<Node> head = root;
-
-    generateCode(head, "", codes);
-
-    // for (const std::string_view str : codes)
-    // {
-    //     if (str.size() != 0)
-    //         std::cout << str << '\n';
-    // }
-
-    for (size_t i = 0; i < 10; ++i)
+    for (size_t i = 0; i < CodeLenTableSize; ++i)
     {
-        std::string str;
-        head = root;
-        while (head.get()->length == -1)
+        if (codeLengths[i] != 0)
+            pairs.push_back({CodeLengthTable[i], codeLengths[i]});
+    }
+    std::sort(pairs.begin(), pairs.end(), [&](std::pair<size_t, size_t> &left, std::pair<size_t, size_t> &right)
+              {
+                if(left.second == right.second)
+                {
+                    auto it = std::find(std::begin(CodeLengthTable), std::end(CodeLengthTable), left.first);
+                    int index = std::distance(std::begin(CodeLengthTable), it);
+
+                    it = std::find(std::begin(CodeLengthTable), std::end(CodeLengthTable), right.first);
+                    int index2 = std::distance(std::begin(CodeLengthTable), it);
+
+                    return index < index2;
+                }
+                
+                return left.second < right.second; });
+
+    std::cout << "============================================\n";
+
+    for (const auto &elem : pairs)
+    {
+        std::cout << elem.first << " --> " << elem.second << '\n';
+    }
+
+    // Symbol -> Code
+    std::vector<std::pair<size_t, size_t>> canonicalCodes;
+    size_t code = 0;
+    size_t prevBitLen = 0;
+
+    for (const auto &[symbol, bitLen] : pairs)
+    {
+        if (bitLen > prevBitLen)
         {
-            unsigned int currentBit = reader.readBit();
-            str = str + std::to_string(currentBit);
-
-            if (currentBit == 0)
-                head = head->left;
-            else
-                head = head->right;
+            code <<= (bitLen - prevBitLen);
         }
 
-        std::cout << str << '\n';
+        canonicalCodes.push_back({symbol, code});
+        ++code;
+        prevBitLen = bitLen;
     }
+
+    std::cout << "============================================\n";
+
+    std::vector<HuffemanCode> codes(pairs.size());
+
+    for (size_t i = 0; i < canonicalCodes.size(); ++i)
+    {
+        const auto pair = canonicalCodes[i];
+
+        std::cout << pair.first << " --> " << std::bitset<8>(pair.second).to_string().substr(8 - pairs[i].second) << '\n';
+
+        codes[i] = {pair.first, pairs[i].second, pair.second};
+    }
+    std::cout << "============================================\n";
+
+    for (const auto &cod : codes)
+    {
+        std::cout << cod;
+    }
+    std::cout << "============================================\n";
+
+    Node head;
+
+    for (const auto &cod : codes)
+    {
+        insertInTree(&head, cod, cod.length);
+    }
+
+    printTree(&head);
+
+    std::cout << "============================================\n";
+
+    std::cout << decodeNextSymbol(reader, &head, 0);
 }
