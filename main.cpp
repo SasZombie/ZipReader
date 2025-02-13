@@ -459,7 +459,7 @@ void readAllCentralDirsHeaders(std::ifstream &file)
 int main()
 {
 
-    std::ifstream file("test.docx", std::ios::binary);
+    std::ifstream file("TestFolder.zip", std::ios::binary);
 
     if (!file.is_open())
     {

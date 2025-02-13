@@ -174,7 +174,7 @@ size_t decodeNextSymbol(BitReader &reader, Node *head, int iter)
             std::cerr << "Error IN Right, not existant\n";
             std::exit(EXIT_FAILURE);
         }
-        decodeNextSymbol(reader, head->right.get(), iter + 1);
+        return decodeNextSymbol(reader, head->right.get(), iter + 1);
     }
     else
     {
@@ -184,9 +184,11 @@ size_t decodeNextSymbol(BitReader &reader, Node *head, int iter)
                       << iter;
             std::exit(EXIT_FAILURE);
         }
-        decodeNextSymbol(reader, head->left.get(), iter + 1);
+        return decodeNextSymbol(reader, head->left.get(), iter + 1);
     }
-    return 1;
+
+    std::cerr << "Error, should not get here\n";
+    return 69;
 }
 
 int main()
@@ -296,5 +298,10 @@ int main()
 
     std::cout << "============================================\n";
 
-    std::cout << decodeNextSymbol(reader, &head, 0);
+
+    for(size_t i = 0; i < HDIST; ++i)
+    {
+        std::cout << (char) decodeNextSymbol(reader, &head, 0) + 13 << ' ';
+    }    
+
 }

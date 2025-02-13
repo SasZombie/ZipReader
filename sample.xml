@@ -1,5 +1,5 @@
 <root>
-  <person>
+  <person attribute="Sunt Prost">
     <name>John Doe</name>
     <age>30</age>
     <email>john.doe@example.com</email>
